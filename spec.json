@@ -1,0 +1,92 @@
+{
+  "documentationUrl": "https://developer.intacct.com/",
+  "connectionSpecification": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "required": [
+      "sender_id",
+      "sender_password",
+      "company_id",
+      "user_id",
+      "user_password"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "sender_id": {
+        "type": "string",
+        "title": "Sender ID"
+      },
+      "sender_password": {
+        "type": "string",
+        "title": "Sender Password",
+        "airbyte_secret": true
+      },
+      "company_id": {
+        "type": "string",
+        "title": "Company ID"
+      },
+      "user_id": {
+        "type": "string",
+        "title": "User ID"
+      },
+      "user_password": {
+        "type": "string",
+        "title": "User Password",
+        "airbyte_secret": true
+      },
+      "api_url": {
+        "type": "string",
+        "title": "API URL",
+        "default": "https://api.intacct.com/ia/xml/xmlgw.phtml"
+      },
+      "start_date": {
+        "type": "string",
+        "format": "date-time",
+        "title": "Start date",
+        "description": "RFC3339 date time used for incremental streams."
+      },
+      "lookback_days": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 30,
+        "default": 3
+      },
+      "page_size": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000,
+        "default": 1000
+      },
+      "slice_step_days": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 31,
+        "default": 7
+      },
+      "entities_mode": {
+        "type": "string",
+        "enum": [
+          "all",
+          "selected"
+        ],
+        "default": "all"
+      },
+      "entity_ids": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "default": []
+      },
+      "oe_invoice_docparid": {
+        "type": "string",
+        "default": "Sales Invoice"
+      },
+      "oe_order_docparid": {
+        "type": "string",
+        "default": "Sales Order"
+      }
+    }
+  }
+}
+

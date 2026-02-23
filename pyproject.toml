@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "source-sage-intacct"
+version = "0.1.0"
+description = "Airbyte source connector for Sage Intacct"
+requires-python = ">=3.10"
+dependencies = [
+  "airbyte-cdk>=0.88.0",
+  "requests>=2.31.0",
+  "python-dateutil>=2.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+]
+
+[tool.setuptools]
+packages = ["source_sage_intacct"]
+
