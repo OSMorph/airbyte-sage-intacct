@@ -1,6 +1,7 @@
 # Airbyte Source: Sage Intacct
 
 Standalone Airbyte Source connector for Sage Intacct XML Web Services.
+Requires Python 3.12.
 
 ## Features
 
@@ -52,6 +53,23 @@ docker run --rm -i source-sage-intacct:dev spec
 docker run --rm -i source-sage-intacct:dev check --config /data/config.json
 docker run --rm -i source-sage-intacct:dev discover --config /data/config.json
 docker run --rm -i source-sage-intacct:dev read --config /data/config.json --catalog /data/catalog.json --state /data/state.json
+```
+
+## Development
+
+### uv
+
+```bash
+uv sync --dev
+uv run ruff check .
+uv run pytest -q
+```
+
+### Nix dev shell
+
+```bash
+nix develop
+uv sync --dev
 ```
 
 ## Integrate with Airbyte
@@ -113,3 +131,9 @@ For Helm deployments, Airbyte worker/job pods must be able to pull your connecto
    - Tag: `0.1.1`
 
 5. Create a source using this connector and run `Check connection`.
+
+## CI/CD
+
+- PR lint: `.github/workflows/lint-pr.yml` uses `uv` and runs `ruff`.
+- Release automation: `.github/workflows/release-please.yml` uses Conventional Commits to open release PRs and create semver tags/releases.
+- Docker publish on tags: `.github/workflows/docker-publish.yml` builds and pushes multi-arch images to `ghcr.io/<owner>/source-sage-intacct` for tags matching `v*.*.*`.

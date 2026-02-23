@@ -4,7 +4,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional
 from xml.etree import ElementTree as ET
 
 import requests
@@ -241,4 +241,3 @@ class IntacctClient:
                 else:
                     result_records.append({child.tag: value})
         return result_records
-
