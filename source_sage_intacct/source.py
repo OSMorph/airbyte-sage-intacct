@@ -29,7 +29,16 @@ class SourceSageIntacct(AbstractSource):
                 return False, "No accessible entities returned by readEntityDetails."
 
             probe_entity = entities[0] if entities else None
-            client.read_by_query("GLACCOUNT", ["RECORDNO"], "RECORDNO > 0", 1, entity_id=probe_entity)
+            probe_error: Optional[Exception] = None
+            for probe_object in ("CUSTOMER", "ARINVOICE", "SODOCUMENT"):
+                try:
+                    client.read_by_query(probe_object, ["RECORDNO"], "RECORDNO > 0", 1, entity_id=probe_entity)
+                    probe_error = None
+                    break
+                except IntacctPermissionError as error:
+                    probe_error = error
+            if probe_error:
+                raise probe_error
 
             for object_name in ("SODOCUMENT", "SODOCUMENTENTRY", "SODOCUMENTSUBTOTALS"):
                 client.lookup(object_name, entity_id=probe_entity)

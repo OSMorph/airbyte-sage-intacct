@@ -5,7 +5,6 @@ Standalone Airbyte Source connector for Sage Intacct XML Web Services.
 ## Features
 
 - Streams:
-  - `gl_accounts`
   - `gl_journals`
   - `gl_batches`
   - `gl_entries`
@@ -48,11 +47,11 @@ Optional:
 ## Local commands
 
 ```bash
-docker build -t source-sage-intacct .
-docker run --rm -i source-sage-intacct spec
-docker run --rm -i source-sage-intacct check --config /data/config.json
-docker run --rm -i source-sage-intacct discover --config /data/config.json
-docker run --rm -i source-sage-intacct read --config /data/config.json --catalog /data/catalog.json --state /data/state.json
+docker buildx build --platform linux/amd64 -t source-sage-intacct:dev --load .
+docker run --rm -i source-sage-intacct:dev spec
+docker run --rm -i source-sage-intacct:dev check --config /data/config.json
+docker run --rm -i source-sage-intacct:dev discover --config /data/config.json
+docker run --rm -i source-sage-intacct:dev read --config /data/config.json --catalog /data/catalog.json --state /data/state.json
 ```
 
 ## Integrate with Airbyte
@@ -64,7 +63,7 @@ You do not run a long-lived connector container manually, but you do need a conn
 
 1. Build the image:
    ```bash
-   docker build -t airbyte/source-sage-intacct:dev .
+   docker buildx build --platform linux/amd64 -t airbyte/source-sage-intacct:dev --load .
    ```
 2. In Airbyte UI, add a custom source connector and set:
    - Repository: `airbyte/source-sage-intacct`
@@ -76,8 +75,7 @@ For Helm deployments, Airbyte worker/job pods must be able to pull your connecto
 
 1. Build and push your image to a registry reachable by the cluster (internal registry is supported):
    ```bash
-   docker build -t registry.mdomain.com/airbyte/source-sage-intacct:0.1.0 .
-   docker push registry.mdomain.com/airbyte/source-sage-intacct:0.1.0
+   docker buildx build --platform linux/amd64 -t registry.mdomain.com/airbyte/source-sage-intacct:0.1.1 --push .
    ```
 
 2. Create pull-secret(s) for that registry:
@@ -112,6 +110,6 @@ For Helm deployments, Airbyte worker/job pods must be able to pull your connecto
 
 4. In Airbyte UI, add a custom source connector:
    - Repository: `registry.mdomain.com/airbyte/source-sage-intacct`
-   - Tag: `0.1.0`
+   - Tag: `0.1.1`
 
 5. Create a source using this connector and run `Check connection`.

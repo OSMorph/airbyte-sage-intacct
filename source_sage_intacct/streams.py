@@ -253,7 +253,6 @@ def build_streams(client: IntacctClient, config: Dict[str, Any]) -> List[SageInt
     invoice_docparid = config.get("oe_invoice_docparid", "Sales Invoice").replace("'", "''")
     order_docparid = config.get("oe_order_docparid", "Sales Order").replace("'", "''")
     return [
-        SageIntacctBaseStream(client, config, "GLACCOUNT", "gl_accounts", supports_incremental=False),
         SageIntacctBaseStream(client, config, "GLJOURNAL", "gl_journals", supports_incremental=False),
         SageIntacctBaseStream(client, config, "GLBATCH", "gl_batches", supports_incremental=True),
         SageIntacctBaseStream(client, config, "GLENTRY", "gl_entries", supports_incremental=True),
