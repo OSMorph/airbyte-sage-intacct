@@ -4,15 +4,16 @@ from source_sage_intacct.streams import SageIntacctBaseStream, parse_rfc3339
 
 
 class DummyClient:
-    def __init__(self):
+    def __init__(self, records=None):
         self.queries = []
+        self.records = records or []
 
     def read_entity_details(self):
         return ["E1", "E2"]
 
     def read_by_query(self, object_name, fields, query, page_size, entity_id=None):
         self.queries.append((object_name, query, entity_id))
-        return type("R", (), {"records": [], "result_id": None, "num_remaining": 0})()
+        return type("R", (), {"records": self.records, "result_id": None, "num_remaining": 0})()
 
     def read_more(self, *_args, **_kwargs):
         return type("R", (), {"records": [], "result_id": None, "num_remaining": 0})()
@@ -67,3 +68,32 @@ def test_order_entry_query_contains_docparid_filter():
 def test_parse_intacct_datetime_format():
     parsed = parse_rfc3339("01/26/2026 13:37:29")
     assert parsed == datetime(2026, 1, 26, 13, 37, 29, tzinfo=timezone.utc)
+
+
+def test_flattens_nested_records_and_normalizes_cursor():
+    stream = SageIntacctBaseStream(DummyClient(), _config(), "CUSTOMER", "customers", True)
+    prepared = stream._prepare_record(
+        {
+            "RECORDNO": "1",
+            "WHENMODIFIED": "01/26/2026 13:37:29",
+            "BILLTO": {"MAILADDRESS": {"ADDRESS1": "123 Main"}},
+        },
+        "E1",
+    )
+    assert prepared["BILLTO_MAILADDRESS_ADDRESS1"] == "123 Main"
+    assert prepared["WHENMODIFIED"] == "2026-01-26T13:37:29Z"
+
+
+def test_schema_inference_includes_nested_sample_fields():
+    records = [
+        {
+            "RECORDNO": "1",
+            "WHENMODIFIED": "01/26/2026 13:37:29",
+            "CONTACTINFO": {"EMAIL1": "test@example.com"},
+        }
+    ]
+    stream = SageIntacctBaseStream(DummyClient(records=records), _config(), "CUSTOMER", "customers", True)
+    schema = stream.infer_json_schema("E1")
+    properties = schema["properties"]
+    assert "CONTACTINFO_EMAIL1" in properties
+    assert "WHENMODIFIED" in properties

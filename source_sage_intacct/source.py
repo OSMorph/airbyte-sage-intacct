@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Set, Tuple
 
 from airbyte_cdk.models import AirbyteStateMessage, ConfiguredAirbyteCatalog, ConnectorSpecification
 from airbyte_cdk.sources import AbstractSource
@@ -71,33 +71,18 @@ class SourceSageIntacct(AbstractSource):
             try:
                 entities = self._resolve_entities(client, config)
                 entity_id = entities[0] if entities else None
+                inferred = stream.infer_json_schema(entity_id)
                 lookup = client.lookup(stream.object_name, entity_id=entity_id)
-                props = {
-                    "entity_id": {"type": ["string", "null"]},
-                    stream.primary_key: {"type": ["string", "integer", "null"]},
-                    stream.cursor_key: {"type": ["string", "null"]},
-                }
-                for key, value in lookup.items():
-                    if key in props:
-                        continue
-                    props[key] = self._to_json_schema_type(value)
-                return {"type": "object", "properties": props, "additionalProperties": True}
+                self._merge_lookup_fields(inferred, lookup)
+                return inferred
             except Exception:
-                return {
-                    "type": "object",
-                    "properties": {
-                        "entity_id": {"type": ["string", "null"]},
-                        stream.primary_key: {"type": ["string", "integer", "null"]},
-                        stream.cursor_key: {"type": ["string", "null"]},
-                    },
-                    "additionalProperties": True,
-                }
+                return stream.get_json_schema()
 
         return _get_schema
 
-    @staticmethod
-    def _to_json_schema_type(value: Any) -> Dict[str, Any]:
-        lowered = str(value).lower()
+    @classmethod
+    def _to_json_schema_type(cls, value: Any) -> Dict[str, Any]:
+        lowered = str(value or "").lower()
         if "int" in lowered or "number" in lowered or "decimal" in lowered:
             return {"type": ["number", "null"]}
         if "date" in lowered or "time" in lowered:
@@ -105,6 +90,37 @@ class SourceSageIntacct(AbstractSource):
         if "bool" in lowered:
             return {"type": ["boolean", "null"]}
         return {"type": ["string", "null"]}
+
+    @classmethod
+    def _merge_lookup_fields(cls, schema: Mapping[str, Any], lookup: Mapping[str, Any]) -> None:
+        properties = schema.get("properties")
+        if not isinstance(properties, dict):
+            return
+
+        for field_name, datatype in cls._extract_lookup_fields(lookup):
+            if field_name in properties:
+                continue
+            properties[field_name] = cls._to_json_schema_type(datatype)
+
+    @classmethod
+    def _extract_lookup_fields(cls, value: Any) -> Set[Tuple[str, str]]:
+        fields: Set[Tuple[str, str]] = set()
+
+        def _walk(node: Any) -> None:
+            if isinstance(node, dict):
+                name = node.get("NAME")
+                if isinstance(name, str) and name:
+                    dtype = str(node.get("DATATYPE") or node.get("TYPE") or "")
+                    fields.add((name, dtype))
+                for child in node.values():
+                    _walk(child)
+                return
+            if isinstance(node, list):
+                for child in node:
+                    _walk(child)
+
+        _walk(value)
+        return fields
 
     @staticmethod
     def _resolve_entities(client: IntacctClient, config: Mapping[str, Any]) -> List[Optional[str]]:

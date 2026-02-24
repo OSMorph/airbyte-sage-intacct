@@ -40,10 +40,13 @@ Optional:
 - `lookback_days` (default: 3)
 - `page_size` (default: 1000, max 1000)
 - `slice_step_days` (default: 7)
+- `schema_sample_size` (default: 200, max 1000; records sampled per stream during discover)
 - `entities_mode` (`all` or `selected`)
 - `entity_ids` (list, used with `selected`)
 - `oe_invoice_docparid` (default: `Sales Invoice`)
 - `oe_order_docparid` (default: `Sales Order`)
+
+Note: records are flattened before emission (nested objects become underscore-delimited columns, for example `BILLTO_MAILADDRESS_ADDRESS1`) to maximize destination columns.
 
 ## Local commands
 

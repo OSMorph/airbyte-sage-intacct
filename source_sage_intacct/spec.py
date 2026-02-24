@@ -13,6 +13,7 @@ def normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
     normalized.setdefault("lookback_days", 3)
     normalized.setdefault("page_size", 1000)
     normalized.setdefault("slice_step_days", 7)
+    normalized.setdefault("schema_sample_size", 200)
     normalized.setdefault("entities_mode", "all")
     normalized.setdefault("entity_ids", [])
     normalized.setdefault("oe_invoice_docparid", "Sales Invoice")
@@ -21,4 +22,3 @@ def normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
         start = datetime.now(timezone.utc) - timedelta(days=30)
         normalized["start_date"] = start.isoformat().replace("+00:00", "Z")
     return normalized
-

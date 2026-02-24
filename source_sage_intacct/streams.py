@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
+import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, Iterator, List, Mapping, MutableMapping, Optional
+from typing import Any, Dict, Iterable, Iterator, List, Mapping, MutableMapping, Optional, Set
 
 from airbyte_cdk.models import SyncMode
 from airbyte_cdk.sources.streams import Stream
@@ -28,6 +30,57 @@ def parse_rfc3339(value: str) -> datetime:
 
 def to_rfc3339(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def sanitize_field_name(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_]", "_", value)
+    collapsed = re.sub(r"_+", "_", cleaned).strip("_")
+    return collapsed or "FIELD"
+
+
+def flatten_record(record: Mapping[str, Any]) -> Dict[str, Any]:
+    flattened: Dict[str, Any] = {}
+
+    def _flatten(prefix: str, value: Any) -> None:
+        if isinstance(value, dict):
+            if not value and prefix:
+                flattened[prefix] = None
+                return
+            for key, child in value.items():
+                segment = sanitize_field_name(str(key))
+                path = segment if not prefix else f"{prefix}_{segment}"
+                _flatten(path, child)
+            return
+
+        if isinstance(value, list):
+            if prefix:
+                flattened[prefix] = json.dumps(value, default=str, separators=(",", ":"))
+            return
+
+        if prefix:
+            flattened[prefix] = value
+
+    for key, value in record.items():
+        _flatten(sanitize_field_name(str(key)), value)
+
+    return flattened
+
+
+def json_schema_types_for_value(value: Any) -> Set[str]:
+    if value is None:
+        return {"null"}
+    if isinstance(value, bool):
+        return {"boolean"}
+    if isinstance(value, int):
+        return {"integer"}
+    if isinstance(value, float):
+        return {"number"}
+    return {"string"}
+
+
+def ordered_types(types: Set[str]) -> List[str]:
+    order = ["null", "boolean", "integer", "number", "string", "object", "array"]
+    return [schema_type for schema_type in order if schema_type in types]
 
 
 class SageIntacctBaseStream(Stream):
@@ -85,6 +138,40 @@ class SageIntacctBaseStream(Stream):
             },
             "additionalProperties": True,
         }
+
+    def infer_json_schema(self, entity_id: Optional[str]) -> Mapping[str, Any]:
+        type_map: Dict[str, Set[str]] = {
+            "entity_id": {"string", "null"},
+            self.primary_key: {"string", "integer", "null"},
+            self.cursor_key: {"string", "null"},
+        }
+        try:
+            for sample in self._sample_records_for_schema(entity_id):
+                flattened = self._prepare_record(sample, entity_id)
+                for key, value in flattened.items():
+                    type_map.setdefault(key, set()).update(json_schema_types_for_value(value))
+        except IntacctError:
+            pass
+
+        properties: Dict[str, Any] = {}
+        for key, types in sorted(type_map.items()):
+            properties[key] = {"type": ordered_types(types)}
+        return {"type": "object", "properties": properties, "additionalProperties": True}
+
+    def _sample_records_for_schema(self, entity_id: Optional[str]) -> List[Dict[str, Any]]:
+        sample_size = int(self.config.get("schema_sample_size", 200))
+        page_size = max(1, min(int(self.config.get("page_size", 1000)), sample_size))
+        query = "RECORDNO > 0"
+        if self.extra_filter:
+            query = f"{query} AND {self.extra_filter}"
+        result = self.client.read_by_query(
+            self.object_name,
+            fields=["*"],
+            query=query,
+            page_size=page_size,
+            entity_id=entity_id,
+        )
+        return result.records[:sample_size]
 
     def entities(self) -> List[Optional[str]]:
         if self._entities_cache is not None:
@@ -167,26 +254,33 @@ class SageIntacctBaseStream(Stream):
         page_size = int(self.config.get("page_size", 1000))
         result = self.client.read_by_query(self.object_name, fields=["*"], query=query, page_size=page_size, entity_id=entity_id)
         for record in result.records:
-            record["entity_id"] = entity_id
-            yield record
+            yield self._prepare_record(record, entity_id)
         while result.result_id and result.num_remaining > 0:
             result = self.client.read_more(result.result_id, entity_id=entity_id)
             for record in result.records:
-                record["entity_id"] = entity_id
-                yield record
+                yield self._prepare_record(record, entity_id)
 
     def _read_incremental_slice(self, entity_id: Optional[str], start: datetime, end: datetime) -> Iterator[Mapping[str, Any]]:
         page_size = int(self.config.get("page_size", 1000))
         query = self._build_query(start, end)
         result = self.client.read_by_query(self.object_name, fields=["*"], query=query, page_size=page_size, entity_id=entity_id)
         for record in result.records:
-            record["entity_id"] = entity_id
-            yield record
+            yield self._prepare_record(record, entity_id)
         while result.result_id and result.num_remaining > 0:
             result = self.client.read_more(result.result_id, entity_id=entity_id)
             for record in result.records:
-                record["entity_id"] = entity_id
-                yield record
+                yield self._prepare_record(record, entity_id)
+
+    def _prepare_record(self, record: Mapping[str, Any], entity_id: Optional[str]) -> Dict[str, Any]:
+        flattened = flatten_record(record)
+        cursor_value = flattened.get(self.cursor_key)
+        if isinstance(cursor_value, str) and cursor_value:
+            try:
+                flattened[self.cursor_key] = to_rfc3339(parse_rfc3339(cursor_value))
+            except ValueError:
+                pass
+        flattened["entity_id"] = entity_id
+        return flattened
 
     def _build_query(self, start: Optional[datetime], end: Optional[datetime]) -> str:
         clauses: List[str] = []
@@ -240,8 +334,7 @@ class ArInvoiceItemsStream(SageIntacctBaseStream):
                 for item in items:
                     item["INVOICE_RECORDNO"] = record_no
                     item["WHENMODIFIED"] = invoice.get("WHENMODIFIED")
-                    item["entity_id"] = entity_id
-                    yield item
+                    yield self._prepare_record(item, entity_id)
 
     def _extract_invoice_items(self, record: Mapping[str, Any]) -> List[Dict[str, Any]]:
         items: List[Dict[str, Any]] = []
