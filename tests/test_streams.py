@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from source_sage_intacct.streams import SageIntacctBaseStream
+from source_sage_intacct.streams import SageIntacctBaseStream, parse_rfc3339
 
 
 class DummyClient:
@@ -63,3 +63,7 @@ def test_order_entry_query_contains_docparid_filter():
     list(stream._read_incremental_slice("E1", datetime(2024, 1, 1, tzinfo=timezone.utc), datetime(2024, 1, 2, tzinfo=timezone.utc)))
     assert "DOCPARID = 'Sales Order'" in client.queries[0][1]
 
+
+def test_parse_intacct_datetime_format():
+    parsed = parse_rfc3339("01/26/2026 13:37:29")
+    assert parsed == datetime(2026, 1, 26, 13, 37, 29, tzinfo=timezone.utc)

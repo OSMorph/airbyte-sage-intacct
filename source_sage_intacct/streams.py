@@ -14,8 +14,13 @@ def rfc3339_now() -> datetime:
 
 
 def parse_rfc3339(value: str) -> datetime:
-    fixed = value.replace("Z", "+00:00")
-    dt = datetime.fromisoformat(fixed)
+    cleaned = value.strip()
+    fixed = cleaned.replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(fixed)
+    except ValueError:
+        # Intacct frequently returns datetime values as MM/DD/YYYY HH:MM:SS.
+        dt = datetime.strptime(cleaned, "%m/%d/%Y %H:%M:%S")
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
@@ -119,8 +124,10 @@ class SageIntacctBaseStream(Stream):
                 for record in self._read_incremental_slice(entity_id, time_slice["start"], time_slice["end"]):
                     wm = record.get(self.cursor_key)
                     if isinstance(wm, str) and wm:
-                        if not max_seen or parse_rfc3339(wm) > parse_rfc3339(max_seen):
-                            max_seen = wm
+                        wm_dt = parse_rfc3339(wm)
+                        wm_rfc3339 = to_rfc3339(wm_dt)
+                        if not max_seen or wm_dt > parse_rfc3339(max_seen):
+                            max_seen = wm_rfc3339
                     yield record
                 if max_seen:
                     state_entities[entity_key] = {"cursor": max_seen}
@@ -133,9 +140,10 @@ class SageIntacctBaseStream(Stream):
         latest_cursor = latest_record.get(self.cursor_key)
         if not latest_cursor:
             return current_state
+        latest_cursor_rfc3339 = to_rfc3339(parse_rfc3339(str(latest_cursor)))
         existing = (entities_state.get(entity_id) or {}).get("cursor")
-        if not existing or parse_rfc3339(latest_cursor) > parse_rfc3339(existing):
-            entities_state[entity_id] = {"cursor": latest_cursor}
+        if not existing or parse_rfc3339(latest_cursor_rfc3339) > parse_rfc3339(existing):
+            entities_state[entity_id] = {"cursor": latest_cursor_rfc3339}
         return {"entities": entities_state}
 
     def _compute_start_time(self, cursor_value: Optional[str]) -> datetime:
